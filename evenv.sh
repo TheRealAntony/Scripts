@@ -2,7 +2,7 @@
 
 # Author: jithuantony4u@gmail.com
 # Description: This script is support only ubuntu OS.
-# Script to deploy kvm vms
+# Script to deploy kvm vms.
 
 # set -x
 # set -e
