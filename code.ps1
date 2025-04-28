@@ -27,6 +27,36 @@ if (!(Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Host "Git is already installed."
 }
 
+# Replace 'C:\Python313\python.exe' with the actual path to your Python executable
+$pythonPath = "C:\Python313\python.exe"
+
+# Add Python full path to environment variables
+Write-Host "Adding Python full path to environment variables..."
+$pythonDir = Split-Path -Parent $pythonPath
+if (-not ($env:Path -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $pythonDir })) {
+    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        Write-Host "This script must be run as an Administrator to modify system environment variables."
+        exit 1
+    }
+    [System.Environment]::SetEnvironmentVariable("Path", "$($env:Path);$pythonDir", [System.EnvironmentVariableTarget]::Machine)
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
+    Write-Host "Python path added to environment variables."
+} else {
+    Write-Host "Python path is already in environment variables."
+}
+
+# Installing python3 and python3-pip if not installed
+if (!(Get-Command python3 -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing Python 3..."
+    choco install python3 -y --ignore-detected-reboot
+    Write-Host "Verifying Python 3 installation..."
+    python --version
+} else {
+    Write-Host "Python 3 is already installed."
+}
+
+
+
 # Install Node.js and npm if not installed
 if (!(Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host "Installing Node.js and npm..."
@@ -123,3 +153,61 @@ if (!(Test-Path "C:\tools\msys64")) {
 } else {
     Write-Host "MSYS2 is already installed."
 }
+
+# Add MSYS2 paths to environment variables
+Write-Host "Adding MSYS2 paths to environment variables..."
+$msys64Paths = @("C:\tools\msys64\mingw64\bin", "C:\tools\msys64\usr\bin")
+foreach ($path in $msys64Paths) {
+    if (-not ($env:Path -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $path })) {
+        if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+            Write-Host "This script must be run as an Administrator to modify system environment variables."
+            exit 1
+        }
+        [System.Environment]::SetEnvironmentVariable("Path", "$($env:Path);$path", [System.EnvironmentVariableTarget]::Machine)
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
+        Write-Host "Added $path to environment variables."
+    } else {
+        Write-Host "$path is already in environment variables."
+    }
+}
+
+# Run MSYS2 as Administrator and execute the required commands
+Write-Host "Running MSYS2 as Administrator to execute package installations..."
+Start-Process -FilePath "C:\tools\msys64\usr\bin\bash.exe" -ArgumentList "-c 'yes | pacman -Syu --noconfirm'" -Wait
+Start-Process -FilePath "C:\tools\msys64\usr\bin\bash.exe" -ArgumentList "-c 'yes | pacman -S mingw-w64-x86_64-go --noconfirm'" -Wait
+Start-Process -FilePath "C:\tools\msys64\usr\bin\bash.exe" -ArgumentList "-c 'yes | pacman -S pkg-config --noconfirm'" -Wait
+Start-Process -FilePath "C:\tools\msys64\usr\bin\bash.exe" -ArgumentList "-c 'yes | pacman -S mingw-w64-x86_64-gcc make git --noconfirm'" -Wait
+Start-Process -FilePath "C:\tools\msys64\usr\bin\bash.exe" -ArgumentList "-c 'yes | pacman -S autoconf automake libtool flex bison --noconfirm'" -Wait
+
+Write-Host "MSYS2 package installations completed."
+
+Write-Host "Environment variable updates completed."
+
+
+# Verifying Python 3 installation
+if (!(Get-Command $pythonPath -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing Python 3..."
+    choco install python3 -y --ignore-detected-reboot
+    Write-Host "Verifying Python 3 installation..."
+    & $pythonPath --version
+} else {
+    Write-Host "Python 3 is already installed."
+}
+
+# Download and extract TensorFlow C library
+Write-Host "Downloading and extracting TensorFlow C library..."
+$libTensorFlowUrl = "https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.15.0.tar.gz"
+$libTensorFlowArchive = "libtensorflow-cpu-linux-x86_64-2.15.0.tar.gz"
+Invoke-WebRequest -Uri $libTensorFlowUrl -OutFile $libTensorFlowArchive -UseBasicParsing
+Write-Host "Extracting TensorFlow C library to /usr/local..."
+tar -C /usr/local -xzf $libTensorFlowArchive
+Write-Host "TensorFlow C library installation completed."
+# Ensure pip is installed and upgraded
+Write-Host "Ensuring pip is installed and upgraded..."
+& $pythonPath -m ensurepip --upgrade
+& $pythonPath -m pip install --upgrade pip
+# Install TensorFlow using pip
+Write-Host "Installing TensorFlow using pip..."
+& $pythonPath -m pip install tensorflow --upgrade
+Write-Host "Verifying TensorFlow installation..."
+& $pythonPath -c "import tensorflow as tf; print('TensorFlow version:', tf.__version__)"
