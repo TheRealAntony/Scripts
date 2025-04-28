@@ -2,6 +2,13 @@
 # This script installs Git, Node.js, Yara, Make, and Wails 3.
 # Ensure the script is executed with Administrator privileges.
 
+
+# Clone the repository and build the project
+$PAT = "<change-me>"
+$repo = "clientagent"
+$branch = "cloud-stage"
+$repoUrl = "https://$PAT@github.com/kitecyber/$repo.git"
+
 # Check if Chocolatey is installed
 if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Host "Chocolatey is not installed. Proceeding with installation..."
@@ -27,35 +34,67 @@ if (!(Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Host "Git is already installed."
 }
 
-# Replace 'C:\Python313\python.exe' with the actual path to your Python executable
-$pythonPath = "C:\Python313\python.exe"
+# Add Python Scripts and Python directory to user and system PATH
+Write-Host "Adding Python Scripts and Python directory to user and system PATH..."
+$pythonPaths = @(
+    "C:\Users\devops\AppData\Local\Programs\Python\Python311\Scripts\",
+    "C:\Users\devops\AppData\Local\Programs\Python\Python311\"
+)
 
-# Add Python full path to environment variables
-Write-Host "Adding Python full path to environment variables..."
-$pythonDir = Split-Path -Parent $pythonPath
-if (-not ($env:Path -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $pythonDir })) {
-    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-Host "This script must be run as an Administrator to modify system environment variables."
-        exit 1
+foreach ($path in $pythonPaths) {
+    # Add to user PATH
+    if (-not ($env:Path -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $path })) {
+        [System.Environment]::SetEnvironmentVariable("Path", "$($env:Path);$path", [System.EnvironmentVariableTarget]::User)
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::User)
+        Write-Host "Added $path to user PATH."
+    } else {
+        Write-Host "$path is already in user PATH."
     }
-    [System.Environment]::SetEnvironmentVariable("Path", "$($env:Path);$pythonDir", [System.EnvironmentVariableTarget]::Machine)
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
-    Write-Host "Python path added to environment variables."
-} else {
-    Write-Host "Python path is already in environment variables."
+
+    # Add to system PATH
+    if (-not ($env:Path -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $path })) {
+        if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+            Write-Host "This script must be run as an Administrator to modify system environment variables."
+            exit 1
+        }
+        [System.Environment]::SetEnvironmentVariable("Path", "$($env:Path);$path", [System.EnvironmentVariableTarget]::Machine)
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
+        Write-Host "Added $path to system PATH."
+    } else {
+        Write-Host "$path is already in system PATH."
+    }
 }
+
+
 
 # Installing python3 and python3-pip if not installed
-if (!(Get-Command python3 -ErrorAction SilentlyContinue)) {
-    Write-Host "Installing Python 3..."
-    choco install python3 -y --ignore-detected-reboot
-    Write-Host "Verifying Python 3 installation..."
-    python --version
+# Check if Python is already installed
+if (!(Get-Command python -ErrorAction SilentlyContinue)) {
+    Write-Host "Python is not installed. Proceeding with installation..."
+    # Install Python 3.11.4 silently using the provided URL
+    $pythonInstallerUrl = "https://www.python.org/ftp/python/3.11.4/python-3.11.4-amd64.exe"
+    $pythonInstallerPath = "$env:TEMP\python-3.11.4-amd64.exe"
+
+    Write-Host "Downloading Python installer..."
+    Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath -UseBasicParsing
+
+    Write-Host "Installing Python silently..."
+    Start-Process -FilePath $pythonInstallerPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+
+    Write-Host "Verifying Python installation..."
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        Write-Host "Python installed successfully."
+        python --version
+    } else {
+        Write-Host "Python installation failed."
+    }
 } else {
-    Write-Host "Python 3 is already installed."
+    Write-Host "Python is already installed."
+    python --version
 }
 
-
+# checking python version
+$pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
 
 # Install Node.js and npm if not installed
 if (!(Get-Command node -ErrorAction SilentlyContinue)) {
@@ -69,22 +108,6 @@ if (!(Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Host "Node.js and npm are already installed."
 }
 
-# Install Yara if not installed
-if (!(Get-Command yara -ErrorAction SilentlyContinue)) {
-    Write-Host "Installing Yara..."
-    choco install yara -y --ignore-detected-reboot
-    Write-Host "Refreshing environment variables..."
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
-    Write-Host "Verifying Yara installation..."
-    $yaraPath = (Get-Command yara -ErrorAction SilentlyContinue).Source
-    if ($yaraPath) {
-        & $yaraPath --version
-    } else {
-        Write-Host "Yara executable not found in the system path."
-    }
-} else {
-    Write-Host "Yara is already installed."
-}
 
 # Install Make if not installed
 if (!(Get-Command make -ErrorAction SilentlyContinue)) {
@@ -95,6 +118,27 @@ if (!(Get-Command make -ErrorAction SilentlyContinue)) {
 } else {
     Write-Host "Make is already installed."
 }
+
+# Install Yara from source
+Write-Host "Installing Yara from source using MSYS2..."
+Start-Process -FilePath "C:\tools\msys64\usr\bin\bash.exe" -ArgumentList "-c 'git clone https://github.com/VirusTotal/yara.git && cd yara && ./bootstrap.sh && ./configure --prefix=/mingw64 && make && make install'" -Wait
+
+# Install missing dependencies for Yara and gosseract
+Write-Host "Installing missing dependencies for Yara and gosseract..."
+Start-Process -FilePath "C:\tools\msys64\usr\bin\bash.exe" -ArgumentList "-c 'yes | pacman -S mingw-w64-x86_64-leptonica mingw-w64-x86_64-tesseract mingw-w64-x86_64-pkg-config mingw-w64-x86_64-gcc --noconfirm'" -Wait
+
+# Set PKG_CONFIG_PATH environment variable
+Write-Host "Setting PKG_CONFIG_PATH environment variable..."
+$pkgConfigPath = "/mingw64/lib/pkgconfig"
+if (-not ($env:PKG_CONFIG_PATH -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $pkgConfigPath })) {
+    [System.Environment]::SetEnvironmentVariable("PKG_CONFIG_PATH", "$($env:PKG_CONFIG_PATH);$pkgConfigPath", [System.EnvironmentVariableTarget]::Machine)
+    $env:PKG_CONFIG_PATH = [System.Environment]::GetEnvironmentVariable("PKG_CONFIG_PATH", [System.EnvironmentVariableTarget]::Machine)
+    Write-Host "Added $pkgConfigPath to PKG_CONFIG_PATH."
+} else {
+    Write-Host "$pkgConfigPath is already in PKG_CONFIG_PATH."
+}
+
+Write-Host "Yara installation completed."
 
 # Install Go if not installed
 if (!(Get-Command go -ErrorAction SilentlyContinue)) {
@@ -181,27 +225,7 @@ Start-Process -FilePath "C:\tools\msys64\usr\bin\bash.exe" -ArgumentList "-c 'ye
 
 Write-Host "MSYS2 package installations completed."
 
-Write-Host "Environment variable updates completed."
 
-
-# Verifying Python 3 installation
-if (!(Get-Command $pythonPath -ErrorAction SilentlyContinue)) {
-    Write-Host "Installing Python 3..."
-    choco install python3 -y --ignore-detected-reboot
-    Write-Host "Verifying Python 3 installation..."
-    & $pythonPath --version
-} else {
-    Write-Host "Python 3 is already installed."
-}
-
-# Download and extract TensorFlow C library
-Write-Host "Downloading and extracting TensorFlow C library..."
-$libTensorFlowUrl = "https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.15.0.tar.gz"
-$libTensorFlowArchive = "libtensorflow-cpu-linux-x86_64-2.15.0.tar.gz"
-Invoke-WebRequest -Uri $libTensorFlowUrl -OutFile $libTensorFlowArchive -UseBasicParsing
-Write-Host "Extracting TensorFlow C library to /usr/local..."
-tar -C /usr/local -xzf $libTensorFlowArchive
-Write-Host "TensorFlow C library installation completed."
 # Ensure pip is installed and upgraded
 Write-Host "Ensuring pip is installed and upgraded..."
 & $pythonPath -m ensurepip --upgrade
@@ -211,3 +235,22 @@ Write-Host "Installing TensorFlow using pip..."
 & $pythonPath -m pip install tensorflow --upgrade
 Write-Host "Verifying TensorFlow installation..."
 & $pythonPath -c "import tensorflow as tf; print('TensorFlow version:', tf.__version__)"
+
+
+Write-Host "Cloning the repository..."
+git clone --branch $branch $repoUrl > $null 2>&1
+
+if (Test-Path $repo) {
+    Write-Host "Repository cloned successfully. Navigating to the project directory..."
+    Set-Location $repo
+
+    Write-Host "Building the UI using Wails 3..."
+    Set-Location "ui"
+    wails3 task build
+
+    Write-Host "Returning to the root directory and running Make..."
+    Set-Location ".."
+    make
+} else {
+    Write-Host "Failed to clone the repository. Please check the credentials and repository URL."
+}
