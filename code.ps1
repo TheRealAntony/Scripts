@@ -4,21 +4,26 @@
 
 
 # Clone the repository and build the project
-$PAT = "<change-me>"
-$repo = "clientagent"
-$branch = "cloud-stage"
+$PAT = "change-me" # Replace with your GitHub Personal Access Token
+$repo = "clientagent-v2"
+$branch = "stage"
 $repoUrl = "https://$PAT@github.com/kitecyber/$repo.git"
 
 # Check if Chocolatey is installed
 if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Host "Chocolatey is not installed. Proceeding with installation..."
     if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-Host "This script must be run as an Administrator. Please restart the script with elevated privileges."
+        Write-Host "This script must be run as an Administrator to install Chocolatey."
         exit 1
     }
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
+    if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Host "Chocolatey installation failed. Please check the logs."
+        exit 1
+    }
     Write-Host "Chocolatey installation completed."
 } else {
     Write-Host "Chocolatey is already installed."
@@ -26,8 +31,21 @@ if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
 
 # Install Git if not installed
 if (!(Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "Installing Git..."
-    choco install git -y --ignore-detected-reboot
+    Write-Host "Installing Git for both user and admin levels..."
+    if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Host "Chocolatey is not installed. Installing Chocolatey..."
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+    }
+
+    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        Write-Host "Installing Git for the current user..."
+        choco install git -y --ignore-detected-reboot --params "/InstallDir:C:\Users\$env:USERNAME\AppData\Local\Programs\Git"
+    } else {
+        Write-Host "Installing Git for all users (Administrator level)..."
+        choco install git -y --ignore-detected-reboot
+    }
     Write-Host "Verifying Git installation..."
     git --version
 } else {
